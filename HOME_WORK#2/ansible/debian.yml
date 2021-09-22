@@ -1,0 +1,125 @@
+---
+ 
+- name: connecting
+  hosts: all
+  become: yes
+
+  vars:
+    final_package_of_docker: [docker-ce, docker-ce-cli, containerd.io]
+    package_for_install: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release]
+ 
+  tasks:    
+  
+  - name: install software-properties-common
+    apt:
+      name: software-properties-common
+      state: present
+      update_cache: yes
+      
+  - name: Add Apt signing key on remote server to keyring
+    apt_key:
+      url: https://download.docker.com/linux/debian/gpg
+      state: present
+
+  - name: add repo of docker
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+      state: present
+      update_cache: yes
+      filename: docker
+   
+  - name: install packages for docker
+    apt:
+      name: "{{ package_for_install }}"
+      state: present
+      update_cache: yes
+
+  - name: install final packages for docker
+    apt:
+      name: "{{ final_package_of_docker }}"
+      state: present
+      update_cache: yes
+
+  - name: Check folder for copy
+    stat:
+      path: /home/{{ ansible_ssh_user }}/app_flask/
+    register: folder_exists
+    
+  - name: Create a directory
+    file: 
+      path: /home/{{ ansible_ssh_user }}/app_flask/
+      state: directory
+      
+  - name: Copy files to server
+    copy:
+      src: /home/kirill/WORK/HOME_WORK/22.09.2021/docker/app_flask/
+      dest: /home/{{ ansible_ssh_user }}/app_flask1/
+      
+  - name: Build docker image
+    shell: docker build -t flask_app1 /home/{{ ansible_ssh_user }}/app_flask1/
+
+  - name: Run docker container
+    shell: docker run -d --restart unless-stopped -p 80:80 --name python_app flask_app1 
+    
+  - name: Pause 
+    pause:
+      seconds: 20
+    
+  - name: check working containers
+    shell: docker ps
+    register: control
+    
+  - name: control check
+    debug:
+      var: control.stdout_lines
+
+  - name: check working app_flask
+    shell: curl localhost
+    register: check_curl
+
+  - name: control check
+    debug:
+      var: check_curl.stdout_lines
+      
+  - name: replace line
+    lineinfile: 
+      path: /etc/ssh/sshd_config  
+      regexp: '(.*)PasswordAuthentication yes$' 
+      line: 'PasswordAuthentication no'
+      backrefs: yes
+
+  - name: replace line
+    lineinfile: 
+      path: /etc/ssh/sshd_config
+      state: absent 
+      regexp: "(.*)PermitRootLogin"
+      
+  - name: write var init_param into file
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      line: "PermitRootLogin no"
+
+  - name: tuning iptables
+    shell: |     
+      iptables -P INPUT ACCEPT
+      iptables -F INPUT
+      iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+      iptables -A INPUT -p tcp  -m multiport --dports 80,443,22 -m conntrack --ctstate NEW -j ACCEPT
+      iptables -P INPUT DROP    
+      iptables -F DOCKER-USER
+      iptables -A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+      iptables -A DOCKER-USER -p tcp  -m multiport --dports 80,443 -m conntrack --ctstate NEW -j RETURN
+      iptables -A DOCKER-USER -j DROP
+      
+  - name: Install iptables-persistent
+    shell: |    
+      echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections
+      echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
+
+  - name: Install iptables-persistent
+    apt:
+      name: iptables-persistent
+      state: present
+      update_cache: yes 
+
+
