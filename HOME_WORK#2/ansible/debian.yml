@@ -7,7 +7,8 @@
   vars:
     final_package_of_docker: [docker-ce, docker-ce-cli, containerd.io]
     package_for_install: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release]
- 
+    path_source: /home/WORK/app_flask/
+  
   tasks:    
   
   - name: install software-properties-common
@@ -52,7 +53,7 @@
       
   - name: Copy files to server
     copy:
-      src: /home/kirill/WORK/HOME_WORK/22.09.2021/docker/app_flask/
+      src: "{{ path_source }}"
       dest: /home/{{ ansible_ssh_user }}/app_flask1/
       
   - name: Build docker image
